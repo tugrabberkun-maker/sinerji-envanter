@@ -471,6 +471,26 @@
       border: 1px solid #e3e7ec;
       padding: 16px 18px 10px;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.35);
+      overflow: hidden;
+    }
+
+    .result-image-wrap {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #ffffff;
+    }
+
+    #resultChartImage {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+      max-height: 72vh;
+      object-fit: contain;
+      border-radius: 16px;
+      background: #fff;
     }
 
     .result-actions {
@@ -596,7 +616,10 @@
         <div class="score-grid" id="scoreGrid"></div>
 
         <div class="canvas-wrap">
-          <canvas id="resultChart" height="460"></canvas>
+          <canvas id="resultChart" height="460" style="display:none;"></canvas>
+          <div class="result-image-wrap">
+            <img id="resultChartImage" alt="Sonuç grafiği" />
+          </div>
         </div>
 
         <div class="result-actions">
@@ -1184,7 +1207,86 @@
       return scores;
     }
 
-    function buildResults() {
+    
+    function createChartImageDataURL(canvas) {
+      const participantRaw = (document.getElementById('participantName')?.value || 'Katılımcı').trim() || 'Katılımcı';
+      const participant = participantRaw.replace(/[\\/:*?"<>|]/g, '').trim() || 'Katılımcı';
+      const title = participant + " - Performans Envanteri Sonuç Grafiği";
+
+      const sourceW = canvas.width;
+      const sourceH = canvas.height;
+
+      // Görüntüleme için daha kontrollü bir JPEG üret
+      const exportW = 1200;
+      const scale = exportW / sourceW;
+
+      const tempCanvas = document.createElement("canvas");
+      const tempCtx = tempCanvas.getContext("2d");
+
+      const titleFontSize = 34;
+      const lineHeight = 44;
+      const sidePadding = 70;
+      const topPadding = 34;
+
+      tempCtx.font = `bold ${titleFontSize}px Arial`;
+
+      function wrapText(ctx, text, maxWidth) {
+        const words = text.split(' ');
+        const lines = [];
+        let line = '';
+        for (let n = 0; n < words.length; n++) {
+          const testLine = line ? line + ' ' + words[n] : words[n];
+          const metrics = ctx.measureText(testLine);
+          if (metrics.width > maxWidth && line) {
+            lines.push(line);
+            line = words[n];
+          } else {
+            line = testLine;
+          }
+        }
+        if (line) lines.push(line);
+        return lines;
+      }
+
+      const titleLines = wrapText(tempCtx, title, exportW - sidePadding * 2);
+      const titleBlockHeight = titleLines.length * lineHeight;
+
+      tempCanvas.width = exportW;
+      tempCanvas.height = Math.round(sourceH * scale) + titleBlockHeight + topPadding + 40;
+
+      tempCtx.fillStyle = "#ffffff";
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+      tempCtx.textAlign = "center";
+      tempCtx.textBaseline = "top";
+      tempCtx.fillStyle = "#111111";
+      tempCtx.font = `bold ${titleFontSize}px Arial`;
+
+      titleLines.forEach((line, idx) => {
+        tempCtx.fillText(line, exportW / 2, topPadding + (idx * lineHeight));
+      });
+
+      tempCtx.imageSmoothingEnabled = true;
+      tempCtx.imageSmoothingQuality = "high";
+      tempCtx.drawImage(
+        canvas,
+        0, 0, sourceW, sourceH,
+        0, titleBlockHeight + topPadding + 18, exportW, Math.round(sourceH * scale)
+      );
+
+      return tempCanvas.toDataURL("image/jpeg", 0.98);
+    }
+
+    function updateResultImageFromCanvas() {
+      const canvas = document.getElementById('resultChart');
+      const img = document.getElementById('resultChartImage');
+      if (!canvas || !img) return;
+      setTimeout(() => {
+        img.src = createChartImageDataURL(canvas);
+      }, 80);
+    }
+
+function buildResults() {
       const scores = calculateScores();
       const grid = document.getElementById('scoreGrid');
       grid.innerHTML = '';
@@ -1242,7 +1344,12 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: { duration: 950 },
+          animation: {
+            duration: 950,
+            onComplete: function() {
+              updateResultImageFromCanvas();
+            }
+          },
           plugins: {
             legend: { display: false },
             tooltip: { enabled: true }
@@ -1335,89 +1442,23 @@
     
 
 
+
 function downloadChart() {
-  const canvas = document.getElementById('resultChart');
   const participantRaw = (document.getElementById('participantName')?.value || 'Katılımcı').trim() || 'Katılımcı';
   const participant = participantRaw.replace(/[\\/:*?"<>|]/g, '').trim() || 'Katılımcı';
-  const title = participant + " - Performans Envanteri Sonuç Grafiği";
-
-  // Telefonda küçük canvas kaynaklı bozulmayı azaltmak için
-  // daha büyük, sabit oranlı bir export canvas oluşturuyoruz.
-  const sourceW = canvas.width;
-  const sourceH = canvas.height;
-  const exportW = Math.max(1600, sourceW * 2);
-  const scale = exportW / sourceW;
-
-  const tempCanvas = document.createElement("canvas");
-  const tempCtx = tempCanvas.getContext("2d");
-
-  const titleFontSize = 34;
-  const lineHeight = 44;
-  const sidePadding = 70;
-  const topPadding = 34;
-
-  tempCtx.font = `bold ${titleFontSize}px Arial`;
-
-  function wrapText(ctx, text, maxWidth) {
-    const words = text.split(' ');
-    const lines = [];
-    let line = '';
-    for (let n = 0; n < words.length; n++) {
-      const testLine = line ? line + ' ' + words[n] : words[n];
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && line) {
-        lines.push(line);
-        line = words[n];
-      } else {
-        line = testLine;
-      }
-    }
-    if (line) lines.push(line);
-    return lines;
-  }
-
-  const titleLines = wrapText(tempCtx, title, exportW - sidePadding * 2);
-  const titleBlockHeight = titleLines.length * lineHeight;
-
-  tempCanvas.width = exportW;
-  tempCanvas.height = Math.round(sourceH * scale) + titleBlockHeight + topPadding + 40;
-
-  tempCtx.fillStyle = "#ffffff";
-  tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-
-  tempCtx.textAlign = "center";
-  tempCtx.textBaseline = "top";
-  tempCtx.fillStyle = "#111111";
-  tempCtx.font = `bold ${titleFontSize}px Arial`;
-
-  titleLines.forEach((line, idx) => {
-    tempCtx.fillText(line, exportW / 2, topPadding + (idx * lineHeight));
-  });
-
-  tempCtx.imageSmoothingEnabled = true;
-  tempCtx.imageSmoothingQuality = "high";
-  tempCtx.drawImage(
-    canvas,
-    0,
-    0,
-    sourceW,
-    sourceH,
-    0,
-    titleBlockHeight + topPadding + 18,
-    exportW,
-    Math.round(sourceH * scale)
-  );
-
   const safeName = participant.replace(/\s+/g, "_");
-  const jpegData = tempCanvas.toDataURL("image/jpeg", 0.98);
+  const img = document.getElementById('resultChartImage');
+
+  if (!img || !img.src) return;
 
   const link = document.createElement("a");
-  link.href = jpegData;
+  link.href = img.src;
   link.download = safeName + "_grafik.jpeg";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 }
+
 
 
 
