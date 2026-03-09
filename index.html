@@ -1334,41 +1334,91 @@
 
     
 
+
 function downloadChart() {
   const canvas = document.getElementById('resultChart');
-
-  const participant = (document.getElementById('participantName')?.value || 'Katılımcı')
-        .replace(/[\\/:*?"<>|]/g,'')
-        .trim();
-
+  const participantRaw = (document.getElementById('participantName')?.value || 'Katılımcı').trim() || 'Katılımcı';
+  const participant = participantRaw.replace(/[\\/:*?"<>|]/g, '').trim() || 'Katılımcı';
   const title = participant + " - Performans Envanteri Sonuç Grafiği";
 
-  const w = canvas.width;
-  const h = canvas.height;
+  // Telefonda küçük canvas kaynaklı bozulmayı azaltmak için
+  // daha büyük, sabit oranlı bir export canvas oluşturuyoruz.
+  const sourceW = canvas.width;
+  const sourceH = canvas.height;
+  const exportW = Math.max(1600, sourceW * 2);
+  const scale = exportW / sourceW;
 
   const tempCanvas = document.createElement("canvas");
-  tempCanvas.width = w;
-  tempCanvas.height = h + 80;
+  const tempCtx = tempCanvas.getContext("2d");
 
-  const ctx = tempCanvas.getContext("2d");
+  const titleFontSize = 34;
+  const lineHeight = 44;
+  const sidePadding = 70;
+  const topPadding = 34;
 
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0,0,tempCanvas.width,tempCanvas.height);
+  tempCtx.font = `bold ${titleFontSize}px Arial`;
 
-  ctx.fillStyle = "#000000";
-  ctx.font = "bold 28px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(title, w/2, 40);
+  function wrapText(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line ? line + ' ' + words[n] : words[n];
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && line) {
+        lines.push(line);
+        line = words[n];
+      } else {
+        line = testLine;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
 
-  ctx.drawImage(canvas,0,80);
+  const titleLines = wrapText(tempCtx, title, exportW - sidePadding * 2);
+  const titleBlockHeight = titleLines.length * lineHeight;
 
-  const safeName = participant.replace(/\s+/g,"_");
+  tempCanvas.width = exportW;
+  tempCanvas.height = Math.round(sourceH * scale) + titleBlockHeight + topPadding + 40;
 
-  const link=document.createElement("a");
-  link.href=tempCanvas.toDataURL("image/jpeg",1.0);
-  link.download=safeName + "_grafik.jpeg";
+  tempCtx.fillStyle = "#ffffff";
+  tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+  tempCtx.textAlign = "center";
+  tempCtx.textBaseline = "top";
+  tempCtx.fillStyle = "#111111";
+  tempCtx.font = `bold ${titleFontSize}px Arial`;
+
+  titleLines.forEach((line, idx) => {
+    tempCtx.fillText(line, exportW / 2, topPadding + (idx * lineHeight));
+  });
+
+  tempCtx.imageSmoothingEnabled = true;
+  tempCtx.imageSmoothingQuality = "high";
+  tempCtx.drawImage(
+    canvas,
+    0,
+    0,
+    sourceW,
+    sourceH,
+    0,
+    titleBlockHeight + topPadding + 18,
+    exportW,
+    Math.round(sourceH * scale)
+  );
+
+  const safeName = participant.replace(/\s+/g, "_");
+  const jpegData = tempCanvas.toDataURL("image/jpeg", 0.98);
+
+  const link = document.createElement("a");
+  link.href = jpegData;
+  link.download = safeName + "_grafik.jpeg";
+  document.body.appendChild(link);
   link.click();
+  document.body.removeChild(link);
 }
+
 
 
 
